@@ -81,6 +81,18 @@ class UserManager:
 
         return self._users[username].password
 
+    async def get_all_users(self) -> list[dict[str, str | int]]:
+        """
+        Get info about all users.
+
+        :return: list of username, status, info
+        """
+        out = []
+        for user in self._users.keys():
+            out.append(await self.get_user(user))
+
+        return out
+
     def add_user(self, user: UserData) -> None:
         """
         Add a new user if it does not already exist.
@@ -135,7 +147,7 @@ class UserManager:
         )
         del user
 
-    async def get_state(self, username: str) -> tuple[int, str]:
+    async def get_status(self, username: str) -> dict[str, str | int]:
         """
         get status and info of a user.
 
@@ -147,17 +159,20 @@ class UserManager:
             raise KeyError(f"User \"{username}\" not found")
 
         user = self._users[username]
-        return user.status, user.info
+        return {
+            "status": user.status,
+            "info": user.info
+        }
 
-    async def get_user_states(self) -> list[tuple[int, str]]:
+    async def get_user_states(self) -> list[dict[str, str | int]]:
         """
         Get status and info of all users.
 
         :return: list of status, info
         """
         out = []
-        for user in self._users.values():
-            out.append((user.status, user.info))
+        for user in self._users.keys():
+            out.append(await self.get_status(user))
 
         return out
 

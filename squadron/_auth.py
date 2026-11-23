@@ -9,7 +9,7 @@ Handles everything involved in authentication.
 from datetime import datetime, timezone, timedelta
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import HTTPException
-from argon2 import PasswordHasher
+from argon2 import PasswordHasher, exceptions
 from typing import Annotated
 from fastapi import Depends
 import asyncio
@@ -30,7 +30,7 @@ def create_token(
         expires_in: int = TOKEN_EXPIRE_MINUTES
 ) -> str:
     """
-    Generate acces token for user
+    Generate access token for user
 
     :param username: username to generate token for
     :param expires_in: time until expiration
@@ -62,12 +62,19 @@ async def login(username: str, password: str) -> str | None:
         return None
 
     # check credentials
-    if not await asyncio.to_thread(
-        AUTH_PW_HASHER.verify,
-        password_hash,
-        password
+    try:
+        asyncio.to_thread(
+            AUTH_PW_HASHER.verify,
+            password_hash,
+            password
+        )
+
+    except (
+            exceptions.VerifyMismatchError,
+            exceptions.VerificationError,
+            exceptions.InvalidHashError
     ):
-        return None
+        raise HTTPException(status_code=401, detail="Incorrect credentials.")
 
     # create token
     return create_token(username)
@@ -90,10 +97,10 @@ async def get_current_user(token: Annotated[str, Depends(OAUTH2_SCHEME)]) -> str
         username = payload["sub"]
 
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Signature expired. Please log in again.")
+        raise HTTPException(status_code=401, detail="Token expired. Please log in again.")
 
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token. Please log in again.")
+        raise HTTPException(status_code=401, detail="Invalid token.")
 
     # check if user is valid
     try:

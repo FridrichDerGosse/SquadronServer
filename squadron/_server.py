@@ -48,9 +48,17 @@ class SquadronServer:
             return {"status": Status.online}
 
         # region get requests
-        @self._app.get("/user/me")  # own user
+        @self._app.get("/user/me")
         async def get_own_user(user: Annotated[str, Depends(get_current_user)]):
+            """
+            Get all information about the current user.
+            :return:
+            """
             return await user_manager.get_user(user)
+
+        @self._app.get("/user/all")
+        async def get_all_users(_: Annotated[str, Depends(get_current_user)]):
+            return await user_manager.get_all_users()
 
         @self._app.get("/user")
         async def get_user(
@@ -61,7 +69,7 @@ class SquadronServer:
 
         @self._app.get("/status/me")  # own user
         async def get_own_state(user: Annotated[str, Depends(get_current_user)]):
-            return await user_manager.get_state(user)
+            return await user_manager.get_status(user)
 
         @self._app.get("/status/all")  # own user
         async def get_all_states(_: Annotated[str, Depends(get_current_user)]):
@@ -118,8 +126,8 @@ class SquadronServer:
             host=HOST,
             port=PORT,
             log_level="warning",
-            ssl_certfile="./localhost+1.pem",
-            ssl_keyfile="./localhost+1-key.pem",
+            # ssl_certfile="./localhost+1.pem",
+            # ssl_keyfile="./localhost+1-key.pem",
         )
         server = uvicorn.Server(config)
         await server.serve()
