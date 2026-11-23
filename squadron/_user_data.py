@@ -8,11 +8,13 @@ Edits and reads all user data.
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from dataclasses import dataclass
+from pydantic import BaseModel
 from sqlmodel import select
+import asyncio
 
 from ._db_definitions import init_db, AlertTarget, \
     Alert, User
-from ._constants import Alert, PriorityLevel, Status
+from ._constants import PriorityLevel, Status, EventType
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,18 @@ class UserData:
     password: str
     status: int = 0
     info: str = ""
+
+
+class StatusEvent(BaseModel):
+    username: str
+    status: Status
+    info: str
+
+
+class AlertEvent(BaseModel):
+    id: int
+    priority_level: PriorityLevel
+    title: str
 
 
 class UserManager:
@@ -38,7 +52,49 @@ class UserManager:
         return cls.__instance
 
     def __init__(self):
-        pass
+        self._sse_queues: dict[int, tuple[int, asyncio.Queue]] = {}
+        self._sse_id = 0
+
+    # region subscriptions
+    def subscribe(self, user_id: int) -> tuple[int, asyncio.Queue]:
+        """
+        Subscribe user to updates.
+
+        :param user_id: id of user to subscribe as.
+        :return: subscription id
+        """
+        sid = self._sse_id
+        self._sse_id += 1
+
+        queue = asyncio.Queue()
+
+        self._sse_queues[sid] = (
+            user_id,
+            queue
+        )
+
+        return sid, queue
+
+    def unsubscribe(self, sid: int) -> None:
+        """
+        remove active subscription.
+        :param sid: subscription id
+        """
+        if sid in self._sse_queues:
+            self._sse_queues.pop(sid)
+
+    def _user_update(self, user: User) -> None:
+        for _, queue in self._sse_queues.values():
+            queue.put_nowait((
+                EventType.user_update,
+                {
+                    "username": user.username,
+                    "status": user.status,
+                    "info": user.info
+                }
+            ))
+
+    # endregion
 
     @staticmethod
     async def init() -> None:
@@ -80,6 +136,7 @@ class UserManager:
             raise KeyError(f"User \"{username}\" not found")
 
         return {
+            "id": user.id,
             "username": user.username,
             "status": user.status,
             "info": user.info
@@ -123,6 +180,7 @@ class UserManager:
         ))
         users = [
             {
+                "id": row.id,
                 "username": row.username,
                 "status": row.status,
                 "info": row.info
@@ -154,8 +212,8 @@ class UserManager:
         session.add(user)
         await session.commit()
 
-    @staticmethod
     async def set_status(
+            self,
             session: AsyncSession,
             username: str,
             status: Status
@@ -180,8 +238,12 @@ class UserManager:
         user.status = Status(status)
         await session.commit()
 
-    @staticmethod
+        # update user
+        await session.refresh(user)
+        self._user_update(user)
+
     async def set_info(
+            self,
             session: AsyncSession,
             username: str,
             info: str
@@ -205,6 +267,10 @@ class UserManager:
         # adjust status
         user.info = info
         await session.commit()
+
+        # update user
+        await session.refresh(user)
+        self._user_update(user)
 
     @staticmethod
     async def get_status(

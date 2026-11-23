@@ -9,9 +9,12 @@ Database definitions.
 from sqlalchemy.ext.asyncio import create_async_engine, \
     AsyncSession, async_sessionmaker
 from collections.abc import AsyncGenerator
-from ._constants import DB_FILE, Status
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Connection
+import time
+
+from ._constants import DB_FILE, Status
+from ._alerts import PriorityLevel
 
 
 class User(SQLModel, table=True):
@@ -24,14 +27,12 @@ class User(SQLModel, table=True):
 
 class Alert(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    priority_level: str
+    priority_level: PriorityLevel
     title: str
-    time: int
+    time: int = Field(default_factory=lambda: time.time())
     info: str | None = None
 
-    alerted_by: int = Field(
-        foreign_key="user.id"
-    )
+    alerted_by: int = Field(foreign_key="user.id")
 
 
 class AlertTarget(SQLModel, table=True):

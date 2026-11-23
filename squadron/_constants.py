@@ -9,7 +9,7 @@ Defines global constants.
 from enum import Enum
 import secrets
 
-from ._alerts import Alert, PriorityLevel
+from ._alerts import PriorityLevel
 
 
 # enums
@@ -23,6 +23,11 @@ class Status(Enum):
     leaving = 7  # leaving shortly
     away = 8  # temporarily away
     pause = 9  # taking a break (german because break is a keyword)
+
+
+class EventType(Enum):
+    user_update = "user_update"
+    alert = "alert"
 
 
 # auth config

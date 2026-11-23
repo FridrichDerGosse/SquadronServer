@@ -6,11 +6,14 @@ FastAPI server.
 | ``Created``: 21/11/2026
 | ``Authors``: Nilusink
 """
+from fastapi.sse import ServerSentEvent, EventSourceResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, model_validator
+from collections.abc import AsyncIterator
 from typing import Annotated
+import asyncio
 
 from ._auth import login, get_current_user
 from ._constants import Status, HOST, PORT
@@ -124,10 +127,10 @@ class SquadronServer:
                 session: AsyncSession = Depends(get_session),
         ):
             try:
-                if state.status:
+                if state.status is not None:
                     await user_manager.set_status(session, user, state.status)
 
-                if state.info:
+                if state.info is not None:
                     await user_manager.set_info(session, user, state.info)
 
             except KeyError:
@@ -137,6 +140,35 @@ class SquadronServer:
                 "success": True
             }
 
+        # endregion
+
+        # region subscriptions
+        @self._app.get("/events")
+        async def get_events_stream(
+                username: Annotated[str, Depends(get_current_user)],
+                session: AsyncSession = Depends(get_session),
+        ) -> AsyncIterator[ServerSentEvent]:
+            # subscribe user to updates
+            user = await user_manager.get_user(session, username)
+            sid, queue = user_manager.subscribe(user["id"])
+
+            yield ServerSentEvent(comment="stream started")
+
+            try:
+                while True:
+                    title, data = await queue.get()
+
+                    yield ServerSentEvent(
+                        data=data,
+                        event=title.value,
+                        retry=5000
+                    )
+
+            except asyncio.CancelledError:
+                raise
+
+            finally:
+                user_manager.unsubscribe(sid)
         # endregion
 
     async def serve(self):
