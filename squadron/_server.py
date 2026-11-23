@@ -127,7 +127,7 @@ class SquadronServer:
                 session: AsyncSession = Depends(get_session),
         ):
             # try to log in
-            token = await login(session, form.username, form.password)
+            token = await login(session, form.username.lower(), form.password)
 
             if not token:
                 raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -146,7 +146,7 @@ class SquadronServer:
             try:
                 user = await user_manager.add_user(
                     session,
-                    form.username,
+                    form.username.lower(),
                     await hash_password(form.password),
                 )
 
@@ -246,9 +246,8 @@ class SquadronServer:
             self._app,
             host=HOST,
             port=PORT,
-            log_level="debug",
-            # ssl_certfile="./localhost+1.pem",
-            # ssl_keyfile="./localhost+1-key.pem",
+            log_level="warning",
+            forwarded_allow_ips="127.0.0.1"
         )
         server = uvicorn.Server(config)
         await server.serve()

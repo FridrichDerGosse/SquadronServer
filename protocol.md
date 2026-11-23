@@ -22,6 +22,10 @@ bcrypt, argon2id
 * `/status/me`
 * `/status/all`
 
+<p>
+
+* `/alerts`
+
 ### POST
 * `/login`
 * `/register`
@@ -92,6 +96,36 @@ OR
 }
 ```
 `/user/all` returns a list of states instead.
+
+<br>
+
+**Exceptions:**
+* `401` - invalid token / token expired
+* `404` - user not found
+
+---
+
+## `/alerts`
+Get all alerts not yet received by current user
+
+**Parameters:** -
+<br>
+
+**Returns** \
+200 Successful Response
+```json
+[
+  {
+      "id": int,
+      "priority_level": "<priority level>",
+      "title": "<alert title info>",
+      "info": "<optional info about alert>",
+      "time": int,
+      "alerted_by": "<username>"
+  },
+    ...
+]
+```
 
 <br>
 
