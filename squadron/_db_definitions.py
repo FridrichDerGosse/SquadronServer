@@ -18,7 +18,7 @@ from ._alerts import PriorityLevel
 
 
 class User(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
     password_hash: str
     status: Status = Status.offline
@@ -26,11 +26,11 @@ class User(SQLModel, table=True):
 
 
 class Alert(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     priority_level: PriorityLevel
     title: str
     time: int = Field(default_factory=lambda: time.time())
-    info: str | None = None
+    info: str = ""
 
     alerted_by: int = Field(foreign_key="user.id")
 

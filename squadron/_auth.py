@@ -117,3 +117,20 @@ async def get_current_user(
 
     # return username if all checks have passed
     return username
+
+
+async def hash_password(password: str) -> str:
+    """
+    hash a password with argon2
+
+    :param password: password to hash
+    :return: hashed password
+    """
+    try:
+        return await asyncio.to_thread(
+            AUTH_PW_HASHER.hash,
+            password,
+        )
+
+    except exceptions.HashingError:
+        raise HTTPException(status_code=400, detail="Unhashable password supplied")

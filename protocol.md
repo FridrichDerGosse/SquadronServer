@@ -16,6 +16,7 @@ bcrypt, argon2id
 * `/user/me`
 * `/user/all`
 
+<p>
 
 * `/status`
 * `/status/me`
@@ -23,7 +24,18 @@ bcrypt, argon2id
 
 ### POST
 * `/login`
+* `/register`
+
+<p>
+
 * `/status`
+
+<p>
+
+* `/alert`
+
+### Subscriptions (SSE, GET)
+* `/events`
 
 ---
 
@@ -44,6 +56,7 @@ bcrypt, argon2id
 200 Successful Response
 ```json
 {
+  "id": int,
   "username": "<name of user>",
   "status": int,
   "info": "<extra status info, set by user>"
@@ -92,7 +105,7 @@ OR
 ## `/login`
 **Parameters:**
 * `username`(form) - name of user to log into
-* `password`(form) - password of user
+* `password`(form) - password of user, unhashed
 
 <br>
 
@@ -112,6 +125,29 @@ OR
 
 ---
 
+## `/register`
+**Parameters:**
+* `username`(form) - name of user to register
+* `password`(form) - password, unhashed
+
+<br>
+
+**Returns:**\
+200 Successful Response
+```json
+{
+  "success": true,
+  "user": <user scheme>
+}
+```
+
+<br>
+
+**Exceptions:**
+* `400` - Unhashable password
+* `409` - User already registered
+
+---
 ## `/status`
 **Parameters:**
 * (o) `status`(int, json) - valid integer status code
@@ -136,6 +172,47 @@ At least one of the parameters has to be specified.
 * `404` - user not found
 
 ---
+
+## Subscriptions
+## `/events`
+**Parameters:** -
+
+<br>
+
+**Returns:**
+1x Start notification, then:
+
+<br>
+
+`user_update`:
+```json
+{
+  "event": "user_update",
+  "data": {
+    "username": "<username>",
+    "status": int,
+    "info": "<info>"
+  }
+}
+```
+
+<br>
+
+`alert`:
+```json
+{
+  "event": "alert",
+  "data": {
+    "id": int,
+    "priority_level": "<priority level>",
+    "title": "<alert title info>",
+    "info": "<optional info about alert>",
+    "time": int,
+    "alerted_by": "<username>"
+  }
+}
+```
+
 
 # Database
 ```mermaid

@@ -15,8 +15,8 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 import asyncio
 
-from ._auth import login, get_current_user
-from ._constants import Status, HOST, PORT
+from ._constants import Status, HOST, PORT, EventType, PriorityLevel
+from ._auth import login, get_current_user, hash_password
 from ._db_definitions import get_session
 from ._user_data import user_manager
 import uvicorn
@@ -32,6 +32,13 @@ class UserStatus(BaseModel):
             raise ValueError("At least one of 'status' or 'info' must be provided")
 
         return self
+
+
+class AlertInfo(BaseModel):
+    priority: PriorityLevel
+    title: str
+    targets: list[str]
+    info: str = ""
 
 
 class SquadronServer:
@@ -101,6 +108,16 @@ class SquadronServer:
         ):
             return await user_manager.get_status(session, username)
 
+        @self._app.get("/alerts")
+        async def get_alerts(
+                username: Annotated[str, Depends(get_current_user)],
+                session: AsyncSession = Depends(get_session),
+        ):
+            user = await user_manager.get_user(session, username)
+            alerts = await user_manager.check_alerts(session, user["id"])
+
+            return alerts
+
         # endregion
 
         # region post requests
@@ -119,6 +136,28 @@ class SquadronServer:
                 "access_token": token,
                 "token_type": "bearer",
             }
+
+        @self._app.post("/register")
+        async def register(
+                form: Annotated[OAuth2PasswordRequestForm, Depends()],
+                session: AsyncSession = Depends(get_session),
+        ):
+            # try to register user
+            try:
+                user = await user_manager.add_user(
+                    session,
+                    form.username,
+                    await hash_password(form.password),
+                )
+
+            except KeyError:
+                raise HTTPException(status_code=409, detail="User already exists.")
+
+            return {
+                "success": True,
+                "user": user
+            }
+
 
         @self._app.post("/status")
         async def set_state(
@@ -140,6 +179,30 @@ class SquadronServer:
                 "success": True
             }
 
+        @self._app.post("/alert")
+        async def alert(
+                username: Annotated[str, Depends(get_current_user)],
+                data: AlertInfo,
+                session: AsyncSession = Depends(get_session),
+        ):
+            # get own user ID
+            user = await user_manager.get_user(session, username)
+
+            # alert users
+            n_alerted = await user_manager.alert_users(
+                user["id"],
+                data.priority,
+                data.title,
+                session,
+                data.targets,
+                info=data.info
+            )
+
+            return {
+                "success": True,
+                "n_alerted": n_alerted
+            }
+
         # endregion
 
         # region subscriptions
@@ -154,6 +217,13 @@ class SquadronServer:
 
             yield ServerSentEvent(comment="stream started")
 
+            # look for any outstanding alerts
+            for alert in await user_manager.check_alerts(session, user["id"]):
+                yield ServerSentEvent(
+                    data=alert,
+                    event=EventType.alert.value
+                )
+
             try:
                 while True:
                     title, data = await queue.get()
@@ -161,14 +231,13 @@ class SquadronServer:
                     yield ServerSentEvent(
                         data=data,
                         event=title.value,
-                        retry=5000
                     )
 
             except asyncio.CancelledError:
                 raise
 
             finally:
-                user_manager.unsubscribe(sid)
+                user_manager.unsubscribe(user["id"], sid)
         # endregion
 
     async def serve(self):
