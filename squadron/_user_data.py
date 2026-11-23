@@ -6,7 +6,13 @@ Edits and reads all user data.
 | ``Created``: 21/11/2026
 | ``Authors``: Nilusink
 """
+from sqlalchemy.ext.asyncio import AsyncSession
 from dataclasses import dataclass
+from sqlmodel import select
+
+from ._db_definitions import init_db, AlertTarget, \
+    Alert, User
+from ._constants import Alert, PriorityLevel, Status
 
 
 @dataclass(frozen=True)
@@ -22,10 +28,8 @@ class UserManager:
     Edits and reads all user data.
 
     :cvar __instance: singular manager instance
-
-    :ivar _users: user data
     """
-    __instance: UserManager = None
+    __instance: UserManager | None = None
 
     def __new__(cls, *args, **kwargs):
         if not cls.__instance:
@@ -33,149 +37,225 @@ class UserManager:
 
         return cls.__instance
 
-    def __init__(self) -> None:
-        self._users: dict[str, UserData] = {}
+    def __init__(self):
+        pass
 
-        self.add_user(UserData(
-            name="Nilusink",
-            password="$argon2id$v=19$m=65536,t=3,p=4$uVlioYd2Eow0yBQw9NzqmQ$sUEKKi+yuqOaLCINjaV+0jZzvo65Ie6RIZF/uzCtST8",
-        ))
+    @staticmethod
+    async def init() -> None:
+        await init_db()
 
-    def check_username(self, username: str) -> bool:
+    @staticmethod
+    async def check_username(
+            session: AsyncSession,
+            username: str
+    ) -> bool:
         """
         Check if a username exists.
 
+        :param session: database session
         :param username: username to check
         :return: true if exists, false if not
         """
-        return username in self._users
+        query = select(User).where(User.username == username)
+        return bool(await session.scalar(query))
 
-    async def get_user(self, username: str) -> dict:
+    @staticmethod
+    async def get_user(
+            session: AsyncSession,
+            username: str
+    ) -> dict:
         """
         Try to find a user by username.
 
+        :param session: database session
         :param username: user to get
         :return: userdata
         :raises KeyError: if invalid username
         """
-        if username not in self._users:
+        user = await session.scalar(
+            select(User).where(User.username == username)
+        )
+
+        if not user:
             raise KeyError(f"User \"{username}\" not found")
 
-        user = self._users[username]
         return {
-            "username": user.name,
+            "username": user.username,
             "status": user.status,
             "info": user.info
         }
 
-    async def get_password_hash(self, username: str) -> str:
+    @staticmethod
+    async def get_password_hash(
+            session: AsyncSession,
+            username: str
+    ) -> str:
         """
         get password hash of a user.
 
+        :param session: database session
         :param username: user to get password hash from
         :return: password hash if found
         :raises KeyError: if invalid username
         """
-        if username not in self._users:
+        user = await session.scalar(
+            select(User).where(User.username == username)
+        )
+
+        if not user:
             raise KeyError(f"User \"{username}\" not found")
 
-        return self._users[username].password
+        return user.password_hash
 
-    async def get_all_users(self) -> list[dict[str, str | int]]:
+    @staticmethod
+    async def get_all_users(
+            session: AsyncSession,
+    ) -> list[dict[str, str | int]]:
         """
         Get info about all users.
 
         :return: list of username, status, info
         """
-        out = []
-        for user in self._users.keys():
-            out.append(await self.get_user(user))
+        result = await session.execute(select(  # type: ignore
+            User.username,
+            User.status,
+            User.info
+        ))
+        users = [
+            {
+                "username": row.username,
+                "status": row.status,
+                "info": row.info
+            }
+            for row in result
+        ]
 
-        return out
+        return users
 
-    def add_user(self, user: UserData) -> None:
+    async def add_user(
+            self,
+            session: AsyncSession,
+            user: UserData
+    ) -> None:
         """
         Add a new user if it does not already exist.
 
+        :param session: database session
         :param user: userdata to add
         :raises KeyError: if user already exists
         """
-        if user.name in self._users:
-            raise KeyError
+        if await self.check_username(session, user.name):
+            raise KeyError("User already exists")
 
-        self._users[user.name] = user
+        user = User(
+            username=user.name,
+            password_hash=user.password,
+        )
+        session.add(user)
+        await session.commit()
 
-    async def set_status(self, username: str, status: int) -> None:
+    @staticmethod
+    async def set_status(
+            session: AsyncSession,
+            username: str,
+            status: Status
+    ) -> None:
         """
         Set status of a user
 
+        :param session: database session
         :param username: user to change
         :param status: status to set
         :raises KeyError: if invalid username
         """
-        if username not in self._users:
+        # get user
+        user = await session.scalar(
+            select(User).where(User.username == username)
+        )
+
+        if user is None:
             raise KeyError(f"User \"{username}\" not found")
 
-        # create new instance because frozen dataclass
-        user = self._users[username]
-        self._users[username] = UserData(
-            user.name,
-            user.password,
-            status,
-            user.info
-        )
-        del user
+        # adjust status
+        user.status = Status(status)
+        await session.commit()
 
-    async def set_info(self, username: str, info: str) -> None:
+    @staticmethod
+    async def set_info(
+            session: AsyncSession,
+            username: str,
+            info: str
+    ) -> None:
         """
         Set info of a user
 
+        :param session: database session
         :param username: user to change
         :param info: info to set
         :raises KeyError: if invalid username
         """
-        if username not in self._users:
+        # get user
+        user = await session.scalar(
+            select(User).where(User.username == username)
+        )
+
+        if user is None:
             raise KeyError(f"User \"{username}\" not found")
 
-        # create new instance because frozen dataclass
-        user = self._users[username]
-        self._users[username] = UserData(
-            user.name,
-            user.password,
-            user.status,
-            info
-        )
-        del user
+        # adjust status
+        user.info = info
+        await session.commit()
 
-    async def get_status(self, username: str) -> dict[str, str | int]:
+    @staticmethod
+    async def get_status(
+            session: AsyncSession,
+            username: str
+    ) -> dict[str, Status | str]:
         """
         get status and info of a user.
 
+        :param session: database session
         :param username: user to check
         :return: status, info
         :raises KeyError: if invalid username
         """
-        if username not in self._users:
+        user = await session.scalar(
+            select(User).where(User.username == username)
+        )
+
+        if not user:
             raise KeyError(f"User \"{username}\" not found")
 
-        user = self._users[username]
         return {
             "status": user.status,
             "info": user.info
         }
 
-    async def get_user_states(self) -> list[dict[str, str | int]]:
+    @staticmethod
+    async def get_user_states(
+            session: AsyncSession,
+    ) -> list[dict[str, str | int]]:
         """
         Get status and info of all users.
 
+        :param session: database session
         :return: list of status, info
         """
-        out = []
-        for user in self._users.keys():
-            out.append(await self.get_status(user))
+        result = await session.execute(select(  # type: ignore
+            User.username,
+            User.status,
+            User.info
+        ))
+        users = [
+            {
+                "status": row.status,
+                "info": row.info
+            }
+            for row in result
+        ]
 
-        return out
+        return users
 
 
 # create singular instance
-user_manager = UserManager()
+user_manager: UserManager = UserManager()

@@ -137,6 +137,35 @@ At least one of the parameters has to be specified.
 
 ---
 
+# Database
+```mermaid
+erDiagram
+    USER ||--o{ ALERT : creates
+    ALERT ||--o{ ALERT_TARGET : creates
+    USER ||--o{ ALERT_TARGET : is_targeted
+
+    USER {
+        int id PK
+        string username
+        string password
+        int status
+        string info "NULLABLE"
+    }
+    ALERT {
+        int id PK
+        int priority_level
+        string title
+        int time
+        string info "NULLABLE"
+        int alerted_by FK
+    }
+    ALERT_TARGET {
+        int alert_id PK
+        int user_id PK
+        bool executed
+    }
+```
+
 # TODO
 * alerting other users
 * SSE for notifications

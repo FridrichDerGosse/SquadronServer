@@ -8,11 +8,13 @@ FastAPI server.
 """
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, model_validator
 from typing import Annotated
 
 from ._auth import login, get_current_user
 from ._constants import Status, HOST, PORT
+from ._db_definitions import get_session
 from ._user_data import user_manager
 import uvicorn
 
@@ -49,46 +51,63 @@ class SquadronServer:
 
         # region get requests
         @self._app.get("/user/me")
-        async def get_own_user(user: Annotated[str, Depends(get_current_user)]):
+        async def get_own_user(
+                user: Annotated[str, Depends(get_current_user)],
+                session: AsyncSession = Depends(get_session)
+        ):
             """
             Get all information about the current user.
             :return:
             """
-            return await user_manager.get_user(user)
+            return await user_manager.get_user(session, user)
 
         @self._app.get("/user/all")
-        async def get_all_users(_: Annotated[str, Depends(get_current_user)]):
-            return await user_manager.get_all_users()
+        async def get_all_users(
+                _: Annotated[str, Depends(get_current_user)],
+                session: AsyncSession = Depends(get_session)
+        ):
+            return await user_manager.get_all_users(session)
 
         @self._app.get("/user")
         async def get_user(
                 _: Annotated[str, Depends(get_current_user)],
-                username: str
+                username: str,
+                session: AsyncSession = Depends(get_session),
         ):
-            return await user_manager.get_user(username)
+            return await user_manager.get_user(session, username)
 
         @self._app.get("/status/me")  # own user
-        async def get_own_state(user: Annotated[str, Depends(get_current_user)]):
-            return await user_manager.get_status(user)
+        async def get_own_state(
+                user: Annotated[str, Depends(get_current_user)],
+                session: AsyncSession = Depends(get_session),
+        ):
+            return await user_manager.get_status(session, user)
 
         @self._app.get("/status/all")  # own user
-        async def get_all_states(_: Annotated[str, Depends(get_current_user)]):
-            return await user_manager.get_user_states()
+        async def get_all_states(
+                _: Annotated[str, Depends(get_current_user)],
+                session: AsyncSession = Depends(get_session),
+        ):
+            return await user_manager.get_user_states(session)
 
         @self._app.get("/status")
         async def get_state(
                 _: Annotated[str, Depends(get_current_user)],
-                username: str
+                username: str,
+                session: AsyncSession = Depends(get_session),
         ):
-            return await user_manager.get_state(username)
+            return await user_manager.get_status(session, username)
 
         # endregion
 
         # region post requests
         @self._app.post("/login")
-        async def login_endpoint(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
+        async def login_endpoint(
+                form: Annotated[OAuth2PasswordRequestForm, Depends()],
+                session: AsyncSession = Depends(get_session),
+        ):
             # try to log in
-            token = await login(form.username, form.password)
+            token = await login(session, form.username, form.password)
 
             if not token:
                 raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -101,14 +120,15 @@ class SquadronServer:
         @self._app.post("/status")
         async def set_state(
                 user: Annotated[str, Depends(get_current_user)],
-                state: UserStatus
+                state: UserStatus,
+                session: AsyncSession = Depends(get_session),
         ):
             try:
                 if state.status:
-                    await user_manager.set_status(user, state.status)
+                    await user_manager.set_status(session, user, state.status)
 
                 if state.info:
-                    await user_manager.set_info(user, state.info)
+                    await user_manager.set_info(session, user, state.info)
 
             except KeyError:
                 raise HTTPException(status_code=404, detail="User not found")
@@ -125,7 +145,7 @@ class SquadronServer:
             self._app,
             host=HOST,
             port=PORT,
-            log_level="warning",
+            log_level="debug",
             # ssl_certfile="./localhost+1.pem",
             # ssl_keyfile="./localhost+1-key.pem",
         )

@@ -3,10 +3,12 @@ name = "squadronserver"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "aiosqlite>=0.22.1",
     "argon2-cffi>=25.1.0",
     "fastapi>=0.162.5",
     "pydantic>=2.14.4",
     "pyjwt>=2.15.1",
     "python-multipart>=0.0.32",
+    "sqlmodel[asyncio]>=0.0.50",
     "uvicorn[standard]>=0.54.0",
 ]

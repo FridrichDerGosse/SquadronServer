@@ -6,11 +6,15 @@ Squadron status-sync server.
 | ``Created``: 21.11.2026
 | ``Authors``: Nilusink
 """
-from squadron import SquadronServer
+from squadron import SquadronServer, user_manager
 import asyncio
 
 
 async def main():
+    # setup database
+    await user_manager.init()
+
+    # setup and start server
     server = SquadronServer()
     await server.serve()
 
