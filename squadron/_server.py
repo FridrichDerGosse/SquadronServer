@@ -9,17 +9,19 @@ FastAPI server.
 from fastapi.sse import ServerSentEvent, EventSourceResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, model_validator
 from collections.abc import AsyncIterator
 from typing import Annotated
 import asyncio
+import uvicorn
+import os
 
 from ._constants import Status, HOST, PORT, EventType, PriorityLevel
 from ._auth import login, get_current_user, hash_password
 from ._db_definitions import get_session
 from ._user_data import user_manager
-import uvicorn
 
 
 class UserStatus(BaseModel):
@@ -48,6 +50,25 @@ class SquadronServer:
 
     def __init__(self) -> None:
         self._app = FastAPI()
+
+        # configure CORS
+        raw_origins = os.getenv(
+            "CORS_ORIGINS",
+            "https://app.squadron.party",
+        )
+        allowed_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+        env = os.getenv("APP_ENV", "production").lower()
+        origin_regex = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$" if env == "dev" else None
+
+        self._app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allowed_origins,
+            allow_origin_regex=origin_regex,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
 
         self._register_endpoints()
 
