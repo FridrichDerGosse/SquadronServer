@@ -37,8 +37,8 @@ SECRET_KEY = secrets.token_hex(32)
 
 
 # server config
-HOST: str = "0.0.0.0"
-PORT: int = 42069
+HOST: str = "127.0.0.1"
+PORT: int = 42067
 
 
 # database
