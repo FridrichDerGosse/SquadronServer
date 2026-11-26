@@ -187,6 +187,7 @@ class UserManager:
         :return: list of username, status, info
         """
         result = await session.execute(select(  # type: ignore
+            User.id,
             User.username,
             User.status,
             User.info
