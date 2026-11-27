@@ -48,6 +48,7 @@ def create_token(
         algorithm=JWT_ALGORITHM
     )
 
+
 async def login(session: AsyncSession, username: str, password: str) -> str | None:
     """
     Authenticate user. Returns token on success, None on fail.
